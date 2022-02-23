@@ -2,6 +2,7 @@ import socketio
 import socket
 import eventlet
 import multiprocessing as mp
+import os
 
 #Global variables
 
@@ -190,6 +191,8 @@ def run_server():
 			handler = socketio.WSGIApp(sio)
 			#Event initialization. 
 			initialize_server_events(sio)
+			if os.name == 'nt':
+				mp.set_start_method('spawn')
 			#Creates the server process using eventlet. log_output set to false so that the host can participate in the chat.
 			server_proc = mp.Process(target = eventlet.wsgi.server, args = (eventlet.listen(('', port)), handler), kwargs = {"log_output" : False})
 		except:
