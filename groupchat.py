@@ -3,6 +3,7 @@ import socket
 import eventlet
 import multiprocessing as mp
 import sys
+import platform
 
 #Global variables
 
@@ -172,7 +173,8 @@ def port_is_in_use(port):
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	return s.connect_ex(('localhost', port)) == 0
 
-#Inializes the server.io object and launches the server
+#Inializes the server.io object and launches the server.
+#This function is unique to the windows implementation.
 def launch_server(port):
 	#Socket is initialized as a server socket
 	sio = socketio.Server()
@@ -181,8 +183,14 @@ def launch_server(port):
 	initialize_server_events(sio)
 	eventlet.wsgi.server(eventlet.listen(('', port)), handler, log_output = False)
 
-#Attempt to run a server
-def run_server():
+#Attempt to run a server on windows.
+#The 'run server' function and this function
+#are very similar, the reason they are different
+#functions is that on windows, in order to perform
+#multiprocessing, the arguments given to the 
+#function that begins the new process are serialized
+#in a way that sockets can't be.
+def run_server_windows():
 		#Try to open server.
 		try:
 		#Get port number from user
@@ -201,6 +209,40 @@ def run_server():
 		#Open client and connect to own server
 		run_client(True, port)
 		server_proc.terminate()
+
+#Attempt to run a server. We can't just
+#use the windows function because Linux
+#initializes new processes fast enough
+#that the client can "beat" the starting of
+#the server and thing that the server is
+#refusing it connection before it starts.
+def run_server():
+	if __name__ == '__main__':
+		#Try to open server.
+		try:
+		#Get port number from user
+			print("Host on what port number?")
+			port = input()
+			port = int(port)
+			if port_is_in_use(port):
+				print("That port is currently in use so the server cannot be opened.\n")
+				return
+			#Socket is initialized as a server socket 
+			sio = socketio.Server() 
+			#Function called upon server activation. 
+			handler = socketio.WSGIApp(sio)
+			#Event initialization. 
+			initialize_server_events(sio)
+			#Creates the server process using eventlet. log_output set to false so that the host can participate in the chat.
+			server_proc = mp.Process(target = eventlet.wsgi.server, args = (eventlet.listen(('', port)), handler), kwargs = {"log_output" : False})
+		except:
+			print("Failed to initialize server.\n")
+			return 
+		server_proc.start()
+		#Open client and connect to own server
+		run_client(True, port)
+		server_proc.terminate()
+
 
 #Gets user input in the beginning. User can start their own server,
 #connect to an existing server, or exit.
@@ -222,7 +264,10 @@ def begin():
 		while True:
 			user_input = get_user_input()
 			if user_input == 1:
-				run_server()
+				if platform.system() == "Windows":
+					run_server_windows()
+				else:
+					run_server()
 			if user_input == 2:
 				run_client(False, -1)
 			if user_input == 3:
