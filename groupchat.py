@@ -12,7 +12,7 @@ my_name = None
 in_a_chatroom = False
 #Set to true when a client is choosing their name in a chatroom.
 setting_name = False
-#Dictionary table. The server remembers everyone's name here.
+#Dictionary table. The server remembers everyones name here.
 name_hash_table = dict()
 
 #This is where all of the talking happens. Messages are sent to the
