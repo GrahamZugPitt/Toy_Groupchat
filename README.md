@@ -2,8 +2,7 @@
 A simple group chat app that sends messages through sockets. 
 
 Run with python3. The socketio and eventlet 
-python packages are required. (Both can
-be installed via pip).
+python packages are required.
 
 When run, groupchat.py will prompt a user to start a server
 or join a server. The user will then be asked on which port
