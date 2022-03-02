@@ -3,6 +3,7 @@ import socket
 import eventlet
 import multiprocessing as mp
 import os
+import sys
 
 #Global variables
 
@@ -18,7 +19,7 @@ name_hash_table = dict()
 #This is where all of the talking happens. Messages are sent to the
 #server and relayed by the server to all chat participants via
 #socket events. This returns True if the client disconnects
-#voluntarily and False if the client does not. 
+#voluntarily and False if the client does not.
 def conversation_loop(sio, my_name):
 	global in_a_chatroom
 	while in_a_chatroom:
@@ -48,18 +49,18 @@ def initialize_client_events(sio):
 	@sio.event
 	def disconnect():
 		global in_a_chatroom
-		#We invoke setting_name here because the user is not yet considered to be in a chatroom and 
-		#if they are setting their name, then they must not have disconnected voluntarily. 
+		#We invoke setting_name here because the user is not yet considered to be in a chatroom and
+		#if they are setting their name, then they must not have disconnected voluntarily.
 		if in_a_chatroom or setting_name:
 			print("\r\033[K" + "\nConnection to the groupchat has been lost. Press enter to continue.\n\n")
 			in_a_chatroom = False
-			return	
+			return
 		print('You have left the groupchat.\n\n')
 
 	#Prints a message recieved from the server.
 	#The message is recieved as a two item list. the first
 	#item is the name of the original sender and the second
-	#item is the message to the chatroom. 
+	#item is the message to the chatroom.
 	@sio.event
 	def my_message_client(data):
 		#Blocks a user's own message from printing
@@ -83,7 +84,7 @@ def initialize_client_events(sio):
 			return
 		print("\r\033[K" + data + " has left the groupchat.", end = ""),
 		add_name()
-		
+
 #All server socket events
 def initialize_server_events(sio):
 	#Called when a user connects to the server.
@@ -99,7 +100,7 @@ def initialize_server_events(sio):
 		sio.emit('client_left_message', name_hash_table[sid])
 		name_hash_table.pop(sid, None)
 
-	#Prints a recieved message to the server and broadcasts it to all other users. 
+	#Prints a recieved message to the server and broadcasts it to all other users.
 	@sio.event
 	def my_message_server(sid, data):
 		sio.emit("my_message_client", [name_hash_table[sid], data])
@@ -111,10 +112,10 @@ def initialize_server_events(sio):
 	def join_server(sid):
 		sio.emit("client_joined_message", name_hash_table[sid])
 
-	#Called when a new user joins the client. The server checks if 
+	#Called when a new user joins the client. The server checks if
 	#There is currently a user using the requested name and requests
 	#A new name from the client if their chosen name is in use.
-	@sio.event 
+	@sio.event
 	def set_name(sid, data):
 		if data in name_hash_table.values():
 			return False
@@ -123,17 +124,16 @@ def initialize_server_events(sio):
 
 #Makes the user become a client of a server.
 #This is called for both servers and clients.
-#(Users who run servers become clients of 
+#(Users who run servers become clients of
 #the servers they are running)
 def run_client(is_host, port):
-	#Try to connect to the server.
 	try:
 		if port == -1:
 			print("Connect to server on what port?")
 			port = input()
 		#This function initializes a socketIO client, reconnection is set to False
 		#so that the client isn't trying to reconnect to servers on the same port
-		#indefinitely. 
+		#indefinitely.
 		sio = socketio.Client(reconnection = False)
 		initialize_client_events(sio)
 		sio.connect('http://localhost:' + str(port))
@@ -168,14 +168,22 @@ def run_client(is_host, port):
 #Checks whether a given port number is in use.
 #Does this by creating a socket (Not a socketIO object)
 #and attempting to connect to that port. If it succeeds,
-#the port is considered to be in use. 
+#the port is considered to be in use.
 def port_is_in_use(port):
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	return s.connect_ex(('localhost', port)) == 0
 
+#Inializes the server.io object and launches the server
+def launch_server(port):
+	#Socket is initialized as a server socket
+	sio = socketio.Server()
+	#Function called upon server activation.
+	handler = socketio.WSGIApp(sio)
+	initialize_server_events(sio)
+	eventlet.wsgi.server(eventlet.listen(('', port)), handler, log_output = False)
+
 #Attempt to run a server
 def run_server():
-	if __name__ == '__main__':
 		#Try to open server.
 		try:
 		#Get port number from user
@@ -185,19 +193,11 @@ def run_server():
 			if port_is_in_use(port):
 				print("That port is currently in use so the server cannot be opened.\n")
 				return
-			#Socket is initialized as a server socket 
-			sio = socketio.Server() 
-			#Function called upon server activation. 
-			handler = socketio.WSGIApp(sio)
-			#Event initialization. 
-			initialize_server_events(sio)
-			if os.name == 'nt':
-				mp.set_start_method('spawn')
+			server_proc = mp.Process(target = launch_server, args = (port,))
 			#Creates the server process using eventlet. log_output set to false so that the host can participate in the chat.
-			server_proc = mp.Process(target = eventlet.wsgi.server, args = (eventlet.listen(('', port)), handler), kwargs = {"log_output" : False})
 		except:
 			print("Failed to initialize server.\n")
-			return 
+			return
 		server_proc.start()
 		#Open client and connect to own server
 		run_client(True, port)
@@ -217,13 +217,16 @@ def get_user_input():
 	return user_input
 #The start of the program
 def begin():
-	while True:
-		user_input = get_user_input()
-		if user_input == 1:	
-			run_server()
-		if user_input == 2:
-			run_client(False, -1)
-		if user_input == 3:
-			exit()
-#Call of the start of the program
+	if __name__ == '__main__':
+		sys.stdout = sys.stderr
+		user_input = -1
+		while True:
+			user_input = get_user_input()
+			if user_input == 1:
+				run_server()
+			if user_input == 2:
+				run_client(False, -1)
+			if user_input == 3:
+				exit()
+	#Call of the start of the program
 begin()
