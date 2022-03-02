@@ -2,7 +2,6 @@ import socketio
 import socket
 import eventlet
 import multiprocessing as mp
-import os
 import sys
 
 #Global variables
